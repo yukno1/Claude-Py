@@ -1,13 +1,12 @@
-import subprocess
 import glob
 import json
 import ast
 
 
-from .hook import trigger_hooks
-from .skill import SKILL_LOADER
-from .config import client, WORKDIR, SECONDARY_MODEL
-from .task import (
+from claude_py.hook import trigger_hooks
+from claude_py.skill import SKILL_LOADER
+from claude_py.config import client, WORKDIR, SECONDARY_MODEL
+from claude_py.task import (
     create_task,
     update_task,
     list_tasks,
@@ -15,6 +14,8 @@ from .task import (
     claim_task,
     complete_task,
 )
+from .bash import run_bash
+from .bg import should_run_background, start_background_task
 
 
 SUB_SYSTEM = (
@@ -28,7 +29,10 @@ BASE_TOOLS = [
         "description": "Run a shell command.",
         "input_schema": {
             "type": "object",
-            "properties": {"command": {"type": "string"}},
+            "properties": {
+                "command": {"type": "string"},
+                "run_in_background": {"type": "boolean"},
+            },
             "required": ["command"],
         },
     },
@@ -186,21 +190,21 @@ COMPACT_TOOL = {
 TOOLS = [*BASE_TOOLS, TASK_TOOL, COMPACT_TOOL]
 
 
-def run_bash(command: str) -> str:
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            cwd=WORKDIR,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=120,
-        )
-        output = (result.stdout + result.stderr).strip()
-        return output[:50000] if output else "(no output)"
-    except subprocess.TimeoutExpired:
-        return "Error: Timeout (120s)"
+# def run_bash(command: str) -> str:
+#     try:
+#         result = subprocess.run(
+#             command,
+#             shell=True,
+#             cwd=WORKDIR,
+#             capture_output=True,
+#             text=True,
+#             errors="replace",
+#             timeout=120,
+#         )
+#         output = (result.stdout + result.stderr).strip()
+#         return output[:50000] if output else "(no output)"
+#     except subprocess.TimeoutExpired:
+#         return "Error: Timeout (120s)"
 
 
 def run_read(path: str, limit: int | None = None) -> str:
@@ -444,16 +448,31 @@ def run_subagent(prompt: str) -> str:
 TOOL_HANDLERS = {**BASE_HANDLERS, "task": run_subagent}
 
 
-def execute_tool(block) -> str:
-    blocked = trigger_hooks("PreToolUse", block)
-    if blocked:
-        return str(blocked)
-
+def call_tool(block) -> str:
     handler = TOOL_HANDLERS.get(block.name)
     try:
         output = handler(**block.input) if handler else f"Unknown: {block.name}"
     except Exception as error:
         output = f"Error: {error}"
+    return str(output)
+
+
+def execute_tool(block) -> str:
+    blocked = trigger_hooks("PreToolUse", block)
+    if blocked is not None:
+        return str(blocked)
+
+    if should_run_background(block.name, block.input):
+        try:
+            task_id = start_background_task(block)
+            output = (
+                f"[Background task {task_id} started] "
+                "The result will be collected on a later turn."
+            )
+        except Exception as error:
+            output = f"Error: {error}"
+    else:
+        output = call_tool(block)
 
     trigger_hooks("PostToolUse", block, output)
-    return str(output)
+    return output
