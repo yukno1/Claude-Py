@@ -495,3 +495,7 @@ def consolidate_memories() -> int:
     except Exception as error:
         print(f"\n\033[33m[Memory consolidation skipped: {error}]\033[0m")
         return 0
+
+
+if __name__ == "__main__":
+    pass

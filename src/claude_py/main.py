@@ -21,6 +21,7 @@ from .hook import (
     summary_hook,
 )
 from .loop import agent_loop
+from .context import update_context
 
 
 # try:
@@ -51,6 +52,7 @@ def main():
     print("Enter a question, press Enter to send. Type q to quit.\n")
 
     history = []
+    context = update_context({}, [])
     while True:
         try:
             # \001/\002 tell Readline the ANSI escapes have zero display width.
@@ -61,7 +63,7 @@ def main():
             break
         trigger_hooks("UserPromptSubmit", query)
         history.append({"role": "user", "content": query})
-        agent_loop(history)
+        agent_loop(history, context)
         for block in history[-1]["content"]:
             if getattr(block, "type", None) == "text":
                 print(block.text)

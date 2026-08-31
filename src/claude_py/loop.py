@@ -2,12 +2,13 @@ from .tool import TOOLS, execute_tool, SKILL_LOADER
 from .compactor import ContextCompactor
 from .hook import trigger_hooks
 from .memory import (
-    load_memories,
     extract_memories,
     consolidate_memories,
     read_memory_index,
 )
 from .config import MODEL, TRANSCRIPT_DIR, TOOL_RESULTS_DIR, client, WORKDIR
+from .prompt import get_system_prompt
+from .context import update_context
 
 
 COMPACTOR = ContextCompactor(client, MODEL, TRANSCRIPT_DIR, TOOL_RESULTS_DIR)
@@ -36,9 +37,8 @@ def build_system(relevant_memories: str = "") -> str:
     return "\n\n".join(sections)
 
 
-def agent_loop(messages: list):
-    relevant_memories = load_memories(messages)
-    system = build_system(relevant_memories)
+def agent_loop(messages: list, context: dict):
+    system = get_system_prompt(context)
 
     while True:
         response = client.messages.create(
@@ -76,3 +76,7 @@ def agent_loop(messages: list):
                 }
             )
         messages.append({"role": "user", "content": results})
+
+        # Re-evaluate context and prompt after each tool round
+        context = update_context(context, messages)
+        system = get_system_prompt(context)
