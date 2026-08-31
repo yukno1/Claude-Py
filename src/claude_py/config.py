@@ -8,9 +8,18 @@ MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
 SKILLS_DIR = WORKDIR / "skills"
 TRANSCRIPT_DIR = WORKDIR / ".transcripts"
 TOOL_RESULTS_DIR = WORKDIR / ".task_outputs" / "tool-results"
+TASKS_DIR = WORKDIR / ".tasks"
 
 # MODEL = os.environ["MODEL_ID"]
-MODEL = "qwen3.5:9b"
+PRIMARY_MODEL = "qwen3.5:9b"
+SECONDARY_MODEL = "qwen3:4b"
+FALLBACK_MODEL = "qwen3:4b"
+
+# CONSTANTS
+DEFAULT_MAX_TOKENS = 8000
+ESCALATED_MAX_TOKENS = 64000
+MAX_RETRIES = 10
+MAX_RECOVERY_RETRIES = 3
 
 
 client = Anthropic(

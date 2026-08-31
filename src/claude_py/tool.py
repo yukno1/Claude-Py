@@ -6,7 +6,15 @@ import ast
 
 from .hook import trigger_hooks
 from .skill import SKILL_LOADER
-from .config import MODEL, client, WORKDIR
+from .config import client, WORKDIR, SECONDARY_MODEL
+from .task import (
+    create_task,
+    update_task,
+    list_tasks,
+    get_task,
+    claim_task,
+    complete_task,
+)
 
 
 SUB_SYSTEM = (
@@ -96,6 +104,68 @@ BASE_TOOLS = [
             "type": "object",
             "properties": {"name": {"type": "string"}},
             "required": ["name"],
+        },
+    },
+    {
+        "name": "create_task",
+        "description": "Create a task and return its runtime-generated ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["subject"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "update_task",
+        "description": "Add dependencies using IDs returned by create_task.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "pattern": "^task_[0-9a-f]{8}$"},
+                "addBlockedBy": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": "^task_[0-9a-f]{8}$"},
+                    "minItems": 1,
+                },
+            },
+            "required": ["task_id", "addBlockedBy"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": "List tasks with status, owner, and dependencies.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_task",
+        "description": "Get a task by ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "claim_task",
+        "description": "Claim a pending task whose dependencies are complete.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "complete_task",
+        "description": "Complete the task claimed by this agent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+            "required": ["task_id"],
         },
     },
 ]
@@ -256,6 +326,52 @@ def run_todo_write(todos: list | str) -> str:
     return output
 
 
+def run_create_task(subject: str, description: str = "") -> str:
+    task = create_task(subject, description)
+    print(f"  [create] {task.subject}")
+    return f"Created {task.id}: {task.subject}"
+
+
+def run_update_task(task_id: str, addBlockedBy: list[str]) -> str:
+    task = update_task(task_id, addBlockedBy)
+    dependencies = ", ".join(task.blockedBy) or "(none)"
+    print(f"  [update] {task.subject} blockedBy: {dependencies}")
+    return f"Updated {task.id} blockedBy: {dependencies}"
+
+
+def run_list_tasks() -> str:
+    tasks = list_tasks()
+    if not tasks:
+        return "No tasks. Use create_task to add some."
+    lines = []
+    for task in tasks:
+        marker = {
+            "pending": "[ ]",
+            "in_progress": "[>]",
+            "completed": "[x]",
+        }.get(task.status, "[?]")
+        dependencies = (
+            f" (blockedBy: {', '.join(task.blockedBy)})" if task.blockedBy else ""
+        )
+        owner = f" [{task.owner}]" if task.owner else ""
+        lines.append(
+            f"{marker} {task.id}: {task.subject} [{task.status}]{owner}{dependencies}"
+        )
+    return "\n".join(lines)
+
+
+def run_get_task(task_id: str) -> str:
+    return get_task(task_id)
+
+
+def run_claim_task(task_id: str) -> str:
+    return claim_task(task_id, owner="agent")
+
+
+def run_complete_task(task_id: str) -> str:
+    return complete_task(task_id, owner="agent")
+
+
 BASE_HANDLERS = {
     "bash": run_bash,
     "read_file": run_read,
@@ -264,6 +380,12 @@ BASE_HANDLERS = {
     "glob": run_glob,
     "todo_write": run_todo_write,
     "load_skill": SKILL_LOADER.load,
+    "create_task": run_create_task,
+    "update_task": run_update_task,
+    "list_tasks": run_list_tasks,
+    "get_task": run_get_task,
+    "claim_task": run_claim_task,
+    "complete_task": run_complete_task,
 }
 SUB_TOOLS = list(BASE_TOOLS)
 SUB_HANDLERS = dict(BASE_HANDLERS)
@@ -285,7 +407,7 @@ def run_subagent(prompt: str) -> str:
 
     for _ in range(30):
         response = client.messages.create(
-            model=MODEL,
+            model=SECONDARY_MODEL,
             system=SUB_SYSTEM,
             messages=messages,
             tools=SUB_TOOLS,

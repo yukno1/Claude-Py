@@ -36,7 +36,7 @@ CONSOLIDATE_THRESHOLD = 10
 CONSOLIDATE_INPUT_CHAR_LIMIT = 20000
 
 
-def parse_frontmatter(text: str) -> tuple[dict, str]:
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
     if not text.startswith("---\n"):
         return {}, text
     parts = text.split("---", 2)
@@ -51,7 +51,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return metadata, parts[2].lstrip()
 
 
-def memory_slug(name: str) -> str:
+def _memory_slug(name: str) -> str:
     slug = re.sub(r"[^\w]+", "-", name.lower()).strip("-_")
     return slug or "memory"
 
@@ -69,10 +69,6 @@ def memory_path(filename: str, allow_index: bool = False) -> Path:
     if not path.is_relative_to(root):
         raise ValueError(f"Memory path escapes the store: {filename}")
     return path
-
-
-def _memory_slug(name: str) -> str:
-    return memory_slug(name)
 
 
 def _normalized_memory_text(value: str) -> str:
@@ -98,11 +94,11 @@ def should_store_memory(candidate: dict, existing: list[dict]) -> bool:
     if any(marker in candidate_text for marker in TEMPORARY_MEMORY_MARKERS):
         return False
 
-    slug = memory_slug(name)
+    slug = _memory_slug(name)
     normalized_description = _normalized_memory_text(description)
     normalized_body = _normalized_memory_text(body)
     for memory in existing:
-        if memory_slug(str(memory.get("name", ""))) == slug:
+        if _memory_slug(str(memory.get("name", ""))) == slug:
             return False
         if (
             _normalized_memory_text(str(memory.get("description", "")))
@@ -132,7 +128,7 @@ def write_memory_file(name: str, mem_type: str, description: str, body: str) -> 
         raise ValueError("Memory description and body cannot be empty")
 
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-    path = memory_path(f"{memory_slug(name)}.md")
+    path = memory_path(f"{_memory_slug(name)}.md")
     path.write_text(
         memory_document(name, mem_type, description, body), encoding="utf-8"
     )
@@ -150,7 +146,7 @@ def rebuild_memory_index() -> None:
             path = memory_path(path.name)
         except ValueError:
             continue
-        metadata, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        metadata, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
         name = " ".join(str(metadata.get("name") or path.stem).split())
         first_line = next((line for line in body.splitlines() if line.strip()), "")
         description = " ".join(str(metadata.get("description") or first_line).split())
@@ -187,7 +183,7 @@ def list_memory_files() -> list[dict]:
             path = memory_path(path.name)
         except ValueError:
             continue
-        metadata, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        metadata, body = _parse_frontmatter(path.read_text(encoding="utf-8"))
         records.append(
             {
                 "filename": path.name,
@@ -446,7 +442,7 @@ def consolidate_memories() -> int:
             for item in extract_json_array(message_text({"content": response.content}))
             if (validated := validate_memory_record(item)) is not None
         ]
-        slugs = [memory_slug(record["name"]) for record in consolidated]
+        slugs = [_memory_slug(record["name"]) for record in consolidated]
         if not consolidated or len(slugs) != len(set(slugs)):
             raise ValueError("consolidation returned empty or duplicate records")
 
@@ -464,7 +460,7 @@ def consolidate_memories() -> int:
                     except ValueError:
                         continue
             for record in consolidated:
-                path = memory_path(f"{memory_slug(record['name'])}.md")
+                path = memory_path(f"{_memory_slug(record['name'])}.md")
                 path.write_text(
                     memory_document(
                         record["name"],

@@ -11,3 +11,4 @@ wheels/
 
 # agent temporary
 .memory/
+.tasks/
