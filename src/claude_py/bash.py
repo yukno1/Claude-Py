@@ -4,6 +4,7 @@ import signal
 import atexit
 import os
 import time
+from pathlib import Path
 
 from claude_py.config import WORKDIR
 
@@ -11,12 +12,28 @@ _shell_processes: set[subprocess.Popen] = set()
 _shell_process_lock = threading.RLock()
 
 
-def run_bash(command: str, run_in_background: bool = False) -> str:
-    return _format_bash_result(*_run_bash_process(command))
+def run_bash(
+    command: str, cwd: Path | None = None, run_in_background: bool = False
+) -> str:
+    return _format_bash_result(*_run_bash_process(command, cwd))
 
 
 def _stop_process_group(process: subprocess.Popen):
     """Stop processes that remain in the command's original process group."""
+    if os.name == "nt":
+        # Windows 没有进程组 / killpg，直接终止进程（可用 taskkill /T 杀进程树）
+        try:
+            process.terminate()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=0.2)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except OSError:
+                pass
+        return
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(process.pid, sig)
@@ -41,13 +58,13 @@ atexit.register(_stop_all_shell_processes)
 signal.signal(signal.SIGTERM, _handle_termination_signal)
 
 
-def _run_bash_process(command: str) -> tuple[str, int | None]:
+def _run_bash_process(command: str, cwd: Path | None = None) -> tuple[str, int | None]:
     process = None
     try:
         process = subprocess.Popen(
             command,
             shell=True,
-            cwd=WORKDIR,
+            cwd=cwd or WORKDIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

@@ -4,6 +4,12 @@ import json
 import uuid
 import re
 
+COMPACT_TOOL = {
+    "name": "compact",
+    "description": "Summarize earlier conversation to free context space.",
+    "input_schema": {"type": "object", "properties": {}},
+}
+
 
 class ContextCompactor:
     CONTEXT_CHAR_LIMIT = 50000
