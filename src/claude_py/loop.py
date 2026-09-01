@@ -81,6 +81,13 @@ def agent_loop(messages: list, context: dict):
                 ),
                 state,
             )
+        except KeyboardInterrupt:
+            # Ctrl+C 视为"取消本轮"，不吞掉异常，上抛给 REPL 决定去留
+            if waiting_for_ack:
+                del messages[scheduled_start:]
+                restore_cron_jobs(waiting_for_ack)
+            print("\n  \033[33m[interrupted] request cancelled\033[0m")
+            raise
         except Exception as e:
             if waiting_for_ack:
                 del messages[scheduled_start:]

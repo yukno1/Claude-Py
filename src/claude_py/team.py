@@ -1,13 +1,13 @@
 import re
-import time
-import random
 import threading
 from pathlib import Path
-from dataclasses import dataclass, field
+import time
 import json
+from dataclasses import dataclass, field
+import random
 
-from claude_py.config import MAILBOX_DIR, MAILBOX_ROOT, client, SECONDARY_MODEL
-from .task import (
+from claude_py.config import client, SECONDARY_MODEL, MAILBOX_DIR, MAILBOX_ROOT
+from claude_py.task import (
     teammate_assignments,
     assignment_versions,
     task_lock,
@@ -21,6 +21,10 @@ from .task import (
     complete_task,
     TASK_TOOLS,
 )
+from claude_py.bash import run_bash
+from claude_py.file import run_read, run_write, run_edit, run_glob
+from claude_py.hook import check_permission, trigger_hooks
+from claude_py.base_tool import BASE_TOOLS
 from .worktree import (
     task_worktree_cwd,
     assignment_cwd,
@@ -28,20 +32,58 @@ from .worktree import (
     release_teammate_assignment,
     run_create_worktree,
 )
-from .bash import run_bash
-from .file import run_read, run_write, run_edit, run_glob
-from .hook import check_permission, trigger_hooks
-from .tool import BASE_TOOLS
 
 # -- MessageBus and Team Protocols --
 
 
-VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-RESERVED_TEAMMATE_NAMES = {"lead", "agent"}
+@dataclass
+class ProtocolState:
+    request_id: str
+    type: str
+    sender: str
+    target: str
+    status: str
+    payload: str
+    work_version: int | None = None
+    task_id: str | None = None
+    created_at: float = field(default_factory=time.time)
 
 
-def is_valid_agent_name(name: str) -> bool:
-    return bool(VALID_AGENT_NAME.fullmatch(name))
+pending_requests: dict[str, ProtocolState] = {}
+
+
+def new_request_id() -> str:
+    while True:
+        request_id = f"req_{random.randint(0, 999999):06d}"
+        if request_id not in pending_requests:
+            return request_id
+
+
+def match_response(
+    response_type: str, request_id: str, approve: bool, from_agent: str, to_agent: str
+) -> bool:
+    """Match one protocol response to one pending request."""
+    with team_lock:
+        state = pending_requests.get(request_id)
+        if not state:
+            print(f"  [protocol] unknown request_id: {request_id}")
+            return False
+        expected = {
+            "shutdown": "shutdown_response",
+            "plan_approval": "plan_approval_response",
+        }[state.type]
+        if response_type != expected:
+            print(f"  [protocol] expected {expected}, got {response_type}")
+            return False
+        if from_agent != state.target or to_agent != state.sender:
+            print(f"  [protocol] {request_id} responder mismatch")
+            return False
+        if state.status != "pending":
+            print(f"  [protocol] {request_id} already {state.status}")
+            return False
+        state.status = "approved" if approve else "rejected"
+    print(f"  [protocol] {request_id} -> {state.status}")
+    return True
 
 
 class MessageBus:
@@ -117,61 +159,19 @@ class MessageBus:
 
 BUS = MessageBus()
 
+VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+RESERVED_TEAMMATE_NAMES = {"lead", "agent"}
+
+
+def is_valid_agent_name(name: str) -> bool:
+    return bool(VALID_AGENT_NAME.fullmatch(name))
+
+
 # working | waiting_approval | idle | stopping
 active_teammates: dict[str, str] = {}
 plan_gates: dict[str, str] = {}
 plan_request_ids: dict[str, str] = {}
 team_lock = threading.RLock()
-
-
-@dataclass
-class ProtocolState:
-    request_id: str
-    type: str
-    sender: str
-    target: str
-    status: str
-    payload: str
-    work_version: int | None = None
-    task_id: str | None = None
-    created_at: float = field(default_factory=time.time)
-
-
-pending_requests: dict[str, ProtocolState] = {}
-
-
-def new_request_id() -> str:
-    while True:
-        request_id = f"req_{random.randint(0, 999999):06d}"
-        if request_id not in pending_requests:
-            return request_id
-
-
-def match_response(
-    response_type: str, request_id: str, approve: bool, from_agent: str, to_agent: str
-) -> bool:
-    """Match one protocol response to one pending request."""
-    with team_lock:
-        state = pending_requests.get(request_id)
-        if not state:
-            print(f"  [protocol] unknown request_id: {request_id}")
-            return False
-        expected = {
-            "shutdown": "shutdown_response",
-            "plan_approval": "plan_approval_response",
-        }[state.type]
-        if response_type != expected:
-            print(f"  [protocol] expected {expected}, got {response_type}")
-            return False
-        if from_agent != state.target or to_agent != state.sender:
-            print(f"  [protocol] {request_id} responder mismatch")
-            return False
-        if state.status != "pending":
-            print(f"  [protocol] {request_id} already {state.status}")
-            return False
-        state.status = "approved" if approve else "rejected"
-    print(f"  [protocol] {request_id} -> {state.status}")
-    return True
 
 
 def consume_lead_inbox() -> list[dict]:

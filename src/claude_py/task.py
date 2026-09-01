@@ -7,6 +7,7 @@ import threading
 from contextlib import contextmanager
 import os
 
+
 if os.name == "nt":
     import msvcrt
 else:
