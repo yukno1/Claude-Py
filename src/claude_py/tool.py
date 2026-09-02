@@ -1,14 +1,9 @@
 from claude_py.hook import trigger_hooks
-from claude_py.skill import SKILL_LOADER
 from claude_py.config import client, WORKDIR, SECONDARY_MODEL
 from claude_py.task import TASK_TOOLS, TASK_TOOL_HANDLERS
-from .bash import run_bash
 from .bg import should_run_background, start_background_task
-from .cron import run_schedule_cron, run_list_crons, run_cancel_cron
-from .file import run_read, run_write, run_edit, run_glob
-from .base_tool import BASE_TOOLS
+from .base_tool import BASE_TOOLS, BASE_HANDLERS
 from .compactor import COMPACT_TOOL
-from .todo import run_todo_write
 from .team import TEAM_TOOLS, TEAM_TOOL_HANDLERS
 
 
@@ -21,18 +16,6 @@ SUB_SYSTEM = (
 TOOLS = [*BASE_TOOLS, *TASK_TOOLS, *TEAM_TOOLS, COMPACT_TOOL]
 SUB_TOOLS = list(BASE_TOOLS)
 
-BASE_HANDLERS = {
-    "bash": run_bash,
-    "read_file": run_read,
-    "write_file": run_write,
-    "edit_file": run_edit,
-    "glob": run_glob,
-    "todo_write": run_todo_write,
-    "load_skill": SKILL_LOADER.load,
-    "schedule_cron": run_schedule_cron,
-    "list_crons": run_list_crons,
-    "cancel_cron": run_cancel_cron,
-}
 
 TOOL_HANDLERS = {**BASE_HANDLERS, **TASK_TOOL_HANDLERS, **TEAM_TOOL_HANDLERS}
 SUB_HANDLERS = dict(BASE_HANDLERS)
@@ -88,8 +71,8 @@ def run_subagent(prompt: str) -> str:
     return "Subagent stopped after 30 turns without a final answer."
 
 
-def call_tool(block) -> str:
-    handler = TOOL_HANDLERS.get(block.name)
+def call_tool(block, handlers: dict[str, callable]) -> str:
+    handler = handlers.get(block.name)
     try:
         output = handler(**block.input) if handler else f"Unknown: {block.name}"
     except Exception as error:
@@ -97,7 +80,7 @@ def call_tool(block) -> str:
     return str(output)
 
 
-def execute_tool(block) -> str:
+def execute_tool(block, handlers: dict[str, callable] = TOOL_HANDLERS) -> str:
     blocked = trigger_hooks("PreToolUse", block)
     if blocked is not None:
         return str(blocked)
@@ -112,7 +95,7 @@ def execute_tool(block) -> str:
         except Exception as error:
             output = f"Error: {error}"
     else:
-        output = call_tool(block)
+        output = call_tool(block, handlers)
 
     trigger_hooks("PostToolUse", block, output)
     return output

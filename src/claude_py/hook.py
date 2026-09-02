@@ -51,7 +51,10 @@ def check_permission(block, prompt_user: bool = True) -> str | None:
             if not prompt_user:
                 return "Permission required: path is outside the workspace."
             print(f"\n[permission] {block.name}({block.input})")
-            if input("Allow? [y/N] ").strip().lower() not in {"y", "yes"}:
+            if input("\033[33mAllow? [y/N] \033[0m").strip().lower() not in {
+                "y",
+                "yes",
+            }:
                 return "Permission denied by user"
     return None
 
@@ -75,7 +78,7 @@ def large_output_hook(block, output):
 
 
 def context_inject_hook(query: str):
-    print(f"\033[90m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
+    print(f"\033[36m[HOOK] UserPromptSubmit: working in {WORKDIR}\033[0m")
     return None
 
 
@@ -88,5 +91,5 @@ def summary_hook(messages: list):
         )
         if isinstance(block, dict) and block.get("type") == "tool_result"
     )
-    print(f"\033[90m[HOOK] Stop: session used {tool_count} tool calls\033[0m")
+    print(f"\033[34m[HOOK] Stop: session used {tool_count} tool calls\033[0m")
     return None

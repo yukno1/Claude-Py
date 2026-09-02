@@ -2,12 +2,16 @@ import json
 
 from .config import WORKDIR
 from .memory import read_memory_index
+from .skill import SKILL_LOADER
+from .mcp import mcp_clients
 
 PROMPT_SECTIONS = {
     "identity": "You are a coding agent. Act, don't explain.",
     "tools": "Available tools: bash, read_file, write_file.",
     "workspace": f"Working directory: {WORKDIR}",
     "memory": "Relevant memories are injected below when available.",
+    "skill": f"Skills available:\n{SKILL_LOADER.catalog()}\n\nUse load_skill to read the full instructions when a skill applies.",
+    "mcp": f"Connected MCP servers: {mcp_clients}",
 }
 
 
@@ -27,6 +31,14 @@ def assemble_system_prompt(context: dict) -> str:
     memories = context.get("memories", "")
     if memories:
         sections.append(f"Relevant memories:\n{memories}")
+
+    catalog = context.get("skills", "")
+    if catalog:
+        sections.append(PROMPT_SECTIONS["skill"])
+
+    mcp_clients = context.get("mcp_clients", "")
+    if mcp_clients:
+        sections.append(PROMPT_SECTIONS["mcp"])
 
     return "\n\n".join(sections)
 
@@ -54,6 +66,10 @@ def get_system_prompt(context: dict) -> str:
     loaded = ["identity", "tools", "workspace"]
     if context.get("memories"):
         loaded.append("memory")
+    if context.get("skills"):
+        loaded.append("skills")
+    if context.get("mcp_clients"):
+        loaded.append("mcp")
     print(f"  \033[32m[assembled] sections: {', '.join(loaded)}\033[0m")
     return _last_prompt
 

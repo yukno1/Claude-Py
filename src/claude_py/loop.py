@@ -36,6 +36,7 @@ from .cron import (
     acknowledge_cron_jobs,
     restore_cron_jobs,
 )
+from .mcp import assemble_tool_pool
 
 
 COMPACTOR = ContextCompactor(client, PRIMARY_MODEL, TRANSCRIPT_DIR, TOOL_RESULTS_DIR)
@@ -55,7 +56,7 @@ def cron_scheduler_loop(stop_event: threading.Event = RUNTIME_STOP):
 
 def agent_loop(messages: list, context: dict):
     """Main loop with error recovery wrapping LLM calls."""
-    system = get_system_prompt(context)
+    system = get_system_prompt(context)  # 每次重新生成
     state = RecoveryState()
     max_tokens = DEFAULT_MAX_TOKENS
 
@@ -71,12 +72,13 @@ def agent_loop(messages: list, context: dict):
         inject_background_results(messages)
         # ── LLM call: with_retry handles 429/529, outer handles rest ──
         try:
+            tools, handlers = assemble_tool_pool()  # 每次重新构建
             response = with_retry(
                 lambda: client.messages.create(
                     model=PRIMARY_MODEL,
                     system=system,
                     messages=messages,
-                    tools=TOOLS,
+                    tools=tools,
                     max_tokens=max_tokens,
                 ),
                 state,
@@ -176,7 +178,7 @@ def agent_loop(messages: list, context: dict):
         # ── Tool execution ──
         results = []
         for block in tool_calls:
-            output = execute_tool(block)
+            output = execute_tool(block, handlers)
             results.append(
                 {
                     "type": "tool_result",
