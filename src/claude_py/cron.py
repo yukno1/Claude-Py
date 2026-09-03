@@ -1,3 +1,8 @@
+# -- Cron Scheduler --
+
+# Cron jobs are stored separately from conversation history. When a job fires,
+# it becomes a scheduled prompt that is injected back into the same agent loop.
+
 from dataclasses import dataclass, asdict
 import threading
 import datetime

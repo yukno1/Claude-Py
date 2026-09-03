@@ -4,7 +4,8 @@ import re
 from pathlib import Path
 import yaml
 
-from .config import MEMORY_DIR, MEMORY_INDEX, WORKDIR, client
+from claude_py.config import WORKDIR, MEMORY_INDEX, MEMORY_DIR, client
+from claude_py.util import message_text
 
 MODEL = "qwen3:4b"
 
@@ -197,25 +198,6 @@ def list_memory_files() -> list[dict]:
 
 
 # -- Recall --
-
-
-def block_text(block) -> str:
-    if isinstance(block, dict):
-        return str(block.get("text", "")) if block.get("type") == "text" else ""
-    return (
-        str(getattr(block, "text", ""))
-        if getattr(block, "type", None) == "text"
-        else ""
-    )
-
-
-def message_text(message: dict) -> str:
-    content = message.get("content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "\n".join(filter(None, (block_text(block) for block in content)))
-    return ""
 
 
 def extract_json_array(text: str) -> list:

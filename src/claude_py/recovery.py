@@ -1,11 +1,12 @@
+# -- Error Recovery --
+
 import random
 import time
 
-from .config import PRIMARY_MODEL, FALLBACK_MODEL, MAX_RETRIES
+from .config import PRIMARY_MODEL, FALLBACK_MODEL, MAX_RETRIES, MAX_CONSECUTIVE_529
 
 # ── Constants ──
 BASE_DELAY_MS = 500
-MAX_CONSECUTIVE_529 = 3
 CONTINUATION_PROMPT = (
     "Output token limit hit. Resume directly — "
     "no apology, no recap. Pick up mid-thought."
@@ -25,11 +26,8 @@ class RecoveryState:
 
 def retry_delay(attempt, retry_after=None):
     """Exponential backoff with jitter. Retry-After takes priority."""
-    if retry_after:
-        return retry_after
     base = min(BASE_DELAY_MS * (2**attempt), 32000) / 1000
-    jitter = random.uniform(0, base * 0.25)
-    return base + jitter
+    return base + random.uniform(0, base * 0.25)
 
 
 def with_retry(fn, state: RecoveryState):

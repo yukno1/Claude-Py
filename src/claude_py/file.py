@@ -62,7 +62,7 @@ def safe_path(p: str, cwd: Path | None = None) -> Path:
     return path
 
 
-def _agent_cwd() -> tuple[Path | None, str | None]:
+def resolve_agent_cwd() -> tuple[Path | None, str | None]:
     try:
         return assignment_cwd("agent"), None
     except (FileNotFoundError, ValueError) as exc:
@@ -70,25 +70,25 @@ def _agent_cwd() -> tuple[Path | None, str | None]:
 
 
 def run_agent_bash(command: str) -> str:
-    cwd, error = _agent_cwd()
+    cwd, error = resolve_agent_cwd()
     return error or run_bash(command, cwd)
 
 
 def run_agent_read(path: str, limit: int | None = None) -> str:
-    cwd, error = _agent_cwd()
+    cwd, error = resolve_agent_cwd()
     return error or run_read(path, limit, cwd)
 
 
 def run_agent_write(path: str, content: str) -> str:
-    cwd, error = _agent_cwd()
+    cwd, error = resolve_agent_cwd()
     return error or run_write(path, content, cwd)
 
 
 def run_agent_edit(path: str, old_text: str, new_text: str) -> str:
-    cwd, error = _agent_cwd()
+    cwd, error = resolve_agent_cwd()
     return error or run_edit(path, old_text, new_text, cwd)
 
 
 def run_agent_glob(pattern: str) -> str:
-    cwd, error = _agent_cwd()
+    cwd, error = resolve_agent_cwd()
     return error or run_glob(pattern, cwd)

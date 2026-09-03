@@ -2,6 +2,9 @@ import re
 
 from .tool import TOOLS, TOOL_HANDLERS
 
+mcp_tool_policies: dict[str, str] = {}
+_DISALLOWED_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+
 
 class MCPClient:
     """Small in-process stand-in for MCP tools/list and tools/call."""
@@ -34,8 +37,7 @@ class MCPClient:
 
 
 mcp_clients: dict[str, MCPClient] = {}
-mcp_tool_policies: dict[str, str] = {}
-_DISALLOWED_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+
 
 # Authorization comes from host configuration, never server descriptions.
 MCP_HOST_POLICY = {

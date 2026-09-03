@@ -17,9 +17,10 @@ from .hook import (
     large_output_hook,
     summary_hook,
 )
-from .loop import agent_loop
+from .loop import agent_loop, async_event_loop, agent_lock, print_turn_assistants
 from .context import update_context
-from .team import BUS, consume_lead_inbox, format_team_events, active_teammates
+from .team import BUS
+from .console import CONSOLE
 
 # try:
 #     import readline
@@ -95,47 +96,67 @@ def print_last_assistant_message(history: list):
 def main():
     print("Enter a question, press Enter to send. Type q to quit.\n")
 
-    if os.name == "nt":
-        # 后台线程持续读取 stdin，写入队列；主循环用非阻塞方式取行。
-        # 跨平台替代 Windows 上不可用的 select.select([sys.stdin], ...)。
-        threading.Thread(target=_read_stdin, name="stdin-reader", daemon=True).start()
+    # if os.name == "nt":
+    #     # 后台线程持续读取 stdin，写入队列；主循环用非阻塞方式取行。
+    #     # 跨平台替代 Windows 上不可用的 select.select([sys.stdin], ...)。
+    #     threading.Thread(target=_read_stdin, name="stdin-reader", daemon=True).start()
 
     history = []
     context = update_context({}, [])
-    had_teammates = False
+    session_state = {"active_user_request": "(no active user request)"}
+    threading.Thread(
+        target=async_event_loop, args=(history, context, session_state), daemon=True
+    ).start()
+    # had_teammates = False
 
     while True:
-        kind, payload = wait_for_cli_event()
-        if kind == "quit":
+        # query = CONSOLE.ask()
+        # kind, payload = wait_for_cli_event()
+        # if kind == "quit":
+        #     break
+        # if kind == "user":
+        #     if payload is None or payload.strip().lower() in {"q", "exit", ""}:
+        #         break
+        #     trigger_hooks("UserPromptSubmit", payload)
+        #     history.append({"role": "user", "content": payload})
+        # else:
+        #     inbox = consume_lead_inbox()
+        #     if not inbox:
+        #         continue
+        #     history.append(
+        #         {
+        #             "role": "user",
+        #             "content": format_team_events(inbox),
+        #         }
+        #     )
+        #     print(f"[wake: {len(inbox)} team event(s) -> new turn]")
+
+        # agent_loop(history, context)
+        # for block in history[-1]["content"]:
+        #     if getattr(block, "type", None) == "text":
+        #         print(block.text)
+        # print_last_assistant_message(history)
+
+        # if active_teammates:
+        #     had_teammates = True
+        # elif had_teammates and not BUS.peek("lead"):
+        #     print("[all teammates shut down]")
+        #     had_teammates = False
+        # print()
+        try:
+            query = CONSOLE.ask()
+        except (EOFError, KeyboardInterrupt):
             break
-        if kind == "user":
-            if payload is None or payload.strip().lower() in {"q", "exit", ""}:
-                break
-            trigger_hooks("UserPromptSubmit", payload)
-            history.append({"role": "user", "content": payload})
-        else:
-            inbox = consume_lead_inbox()
-            if not inbox:
-                continue
-            history.append(
-                {
-                    "role": "user",
-                    "content": format_team_events(inbox),
-                }
-            )
-            print(f"[wake: {len(inbox)} team event(s) -> new turn]")
-
-        agent_loop(history, context)
-        for block in history[-1]["content"]:
-            if getattr(block, "type", None) == "text":
-                print(block.text)
-        print_last_assistant_message(history)
-
-        if active_teammates:
-            had_teammates = True
-        elif had_teammates and not BUS.peek("lead"):
-            print("[all teammates shut down]")
-            had_teammates = False
+        if query.strip().lower() in ("q", "exit", ""):
+            break
+        with agent_lock:
+            trigger_hooks("UserPromptSubmit", query)
+            turn_start = len(history)
+            session_state["active_user_request"] = query
+            history.append({"role": "user", "content": query})
+            agent_loop(history, context, query)
+            context = update_context(context, history)
+            print_turn_assistants(history, turn_start)
         print()
 
 

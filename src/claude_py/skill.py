@@ -1,7 +1,9 @@
+# -- Skill Loading --
+
 import yaml
 from pathlib import Path
 
-from .config import SKILLS_DIR
+from claude_py.config import SKILLS_DIR
 
 
 class SkillLoader:
@@ -65,6 +67,7 @@ class SkillLoader:
                 "content": content,
             }
 
+    @property
     def catalog(self) -> str:
         if not self.skills:
             return "(no skills found)"

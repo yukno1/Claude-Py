@@ -1,6 +1,6 @@
-from .bash import run_bash
+from .bash import run_agent_bash
 from .cron import run_schedule_cron, run_list_crons, run_cancel_cron
-from .file import run_read, run_write, run_edit, run_glob
+from .file import run_agent_read, run_agent_write, run_agent_edit, run_agent_glob
 from claude_py.skill import SKILL_LOADER
 from .todo import run_todo_write
 
@@ -122,11 +122,11 @@ BASE_TOOLS = [
 ]
 
 BASE_HANDLERS = {
-    "bash": run_bash,
-    "read_file": run_read,
-    "write_file": run_write,
-    "edit_file": run_edit,
-    "glob": run_glob,
+    "bash": run_agent_bash,
+    "read_file": run_agent_read,
+    "write_file": run_agent_write,
+    "edit_file": run_agent_edit,
+    "glob": run_agent_glob,
     "todo_write": run_todo_write,
     "load_skill": SKILL_LOADER.load,
     "schedule_cron": run_schedule_cron,
